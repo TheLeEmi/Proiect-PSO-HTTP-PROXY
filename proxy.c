@@ -19,22 +19,69 @@ int get_content_length(const char *headers)
 
     return 0;
 }
+void forward_request(int client_sock, int server_sock, char *buffer) {
+    // Trimite cererea la server
+    write(server_sock, buffer, strlen(buffer));
 
+    // Citește răspunsul de la server și îl retrimite clientului
+    int n;
+    while ((n = read(server_sock, buffer, 4096)) > 0) {
+        write(client_sock, buffer, n);
+    }
+
+    printf("[FORWARD] Forwarded response to client.\n");
+}
+void block_request(int client_sock) {
+    const char *response =
+        "HTTP/1.1 403 Forbidden\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: 36\r\n"
+        "\r\n"
+        "<h1>Request blocked by proxy</h1>";
+
+    write(client_sock, response, strlen(response));
+    printf("[BLOCK] Sent 403 Forbidden to client.\n");
+}
+void edit_request(int client_sock, int server_sock, char *buffer) {
+    printf("[EDIT] Editing request before forwarding...\n");
+
+    // exemplu simplu: modifică headerul Host
+    char *pos = strstr(buffer, "Host:");
+    if (pos) strcpy(pos, "Host: 127.0.0.1:8000\r\n");
+
+    forward_request(client_sock, server_sock, buffer);
+}
+void replace_response(int client_sock, int server_sock, char *buffer) {
+    printf("[REPLACE] Forwarding request, but replacing response...\n");
+
+    write(server_sock, buffer, strlen(buffer));
+
+    // ignorăm răspunsul real și trimitem altul
+    const char *custom =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: 29\r\n"
+        "\r\n"
+        "<h1>Replaced by Proxy :)</h1>";
+
+    write(client_sock, custom, strlen(custom));
+    printf("[REPLACE] Sent custom response to client.\n");
+}
+void save_request(const char *buffer) {
+    FILE *f = fopen("requests.log", "a");
+    if (!f) {
+        perror("[SAVE] fopen");
+        return;
+    }
+    fprintf(f, "---- New Request ----\n%s\n", buffer);
+    fclose(f);
+    printf("[SAVE] Request saved to requests.log\n");
+}
 void handle_client(int client_sock) {
     char buffer[4096];
     int bytes_read;
 
-    // citește cererea de la client
-    bytes_read = read(client_sock, buffer, sizeof(buffer));
-    if (bytes_read <= 0) {
-        close(client_sock);
-        return;
-    }
-
-    buffer[bytes_read] = '\0';
-    printf("[PROXY] Received request:\n%s\n", buffer);
-
-    // conectare la server
+    // conectare la server o singură dată
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -47,59 +94,48 @@ void handle_client(int client_sock) {
         return;
     }
 
-    printf("[ACTION] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave: ");
-    char action_buffer[10];
-    fgets(action_buffer, sizeof(action_buffer), stdin);
-    char action = action_buffer[0];
+    printf("[PROXY] Connected to server.\n");
 
+    while (1) {
+        // citește o cerere HTTP de la client
+        bytes_read = read(client_sock, buffer, sizeof(buffer) - 1);
+        if (bytes_read <= 0) {
+            printf("[PROXY] Client disconnected. Closing connection.\n");
+            break; // ieșim din buclă → închidem sockets
+        }
 
+        buffer[bytes_read] = '\0';
+        printf("\n[PROXY] Received request:\n%s\n", buffer);
 
-    switch (action) {
-        case 'f':
-            // forward cererea
-            write(server_sock, buffer, strlen(buffer));
-
-            // citește răspunsul serverului și îl retrimite clientului
-            int n;
-            while ((n = read(server_sock, buffer, sizeof(buffer))) > 0) {
-                write(client_sock, buffer, n);
-            }
-
-            printf("[PROXY] Forwarded response to client.\n");
+        printf("[ACTION] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave, (q)uit: ");
+        char action_buffer[10];
+        if (!fgets(action_buffer, sizeof(action_buffer), stdin))
             break;
+        char action = action_buffer[0];
 
-        case 'b':
-            //(Block)
+        if (action == 'q') {
+            printf("[PROXY] Quit command received. Closing connection.\n");
             break;
+        }
 
-        case 'e':
-            // (Edit)
-            // Dupa edit => forward
-            break;
-
-        case 'r':
-            //Replace)
-            // Dupa replace => forward
-            break;
-        
-        case 's':
-            //(Save)
-            // Dupa salvare => actiunea salvata
-            break;
-
-        default:
-            printf("[PROXY] Acțiune necunoscută. Se blochează cererea.\n");
-            // Block by default
-            break;
+        switch (action) {
+            case 'f': forward_request(client_sock, server_sock, buffer); break;
+            case 'b': block_request(client_sock); break;
+            case 'e': edit_request(client_sock, server_sock, buffer); break;
+            case 'r': replace_response(client_sock, server_sock, buffer); break;
+            case 's': save_request(buffer); break;
+            default:
+                printf("[PROXY] Unknown action. Blocking request.\n");
+                block_request(client_sock);
+                break;
+        }
     }
 
-    // Logica de inchidere
-    if (server_sock > 0) {
-        close(server_sock);
-    }
+    close(server_sock);
     close(client_sock);
-
+    printf("[PROXY] Connection closed.\n");
 }
+
 
 int main() {
     int proxy_fd, client_sock;

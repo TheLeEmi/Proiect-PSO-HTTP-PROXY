@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 
 #define PORT 8000
-
+//CLIENT -> (port 8080) PROXY -> (port 8000) SERVER
 int main() {
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -31,7 +31,18 @@ int main() {
 
     while (1) {
         new_socket = accept(server_fd, (struct sockaddr*)&address, &addrlen);
-        read(new_socket, buffer, sizeof(buffer));
+        if (new_socket < 0) {
+            perror("accept failed");
+            break;
+        }
+    
+        int n = read(new_socket, buffer, sizeof(buffer));
+        if (n <= 0) {
+            printf("[SERVER] Proxy disconnected. Shutting down server...\n");
+            close(new_socket);
+            break; // => iese din while
+        }
+    
         printf("[SERVER] Received request:\n%s\n", buffer);
 
         const char *response =
@@ -44,4 +55,7 @@ int main() {
         write(new_socket, response, strlen(response));
         close(new_socket);
     }
+    close(server_fd);
+    return 0;
+
 }
