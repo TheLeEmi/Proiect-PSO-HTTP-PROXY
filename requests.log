@@ -1,0 +1,36 @@
+---- New Request ----
+GET http://localhost:8000/index.html HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+
+---- New Request ----
+GET http://localhost:8000/index.html HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+
+---- New Request ----
+GET http://localhost:8000/index.ht	ml HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+
+---- New Request ----
+GET http://localhost:8000/index.html HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+
+---- New Request ----
+GET http://localhost:8000/indexx.html HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+
+---- New Request ----
+GET http://localhost:8000/index.html HTTP/1.1
+Host: localhost:8000
+Connection: close
+
+

@@ -42,14 +42,33 @@ void block_request(int client_sock) {
     write(client_sock, response, strlen(response));
     printf("[BLOCK] Sent 403 Forbidden to client.\n");
 }
-void edit_request(int client_sock, int server_sock, char *buffer) {
+void edit_request(char *req) {
     printf("[EDIT] Editing request before forwarding...\n");
+    while (1) {
+        printf("\n[EDIT MENU]\n"
+               "1. Change method\n"
+               "2. Change URL\n"
+               "3. Change Host\n"
+               "4. Add/replace header\n"
+               "5. Remove header\n"
+               "6. Edit body\n"
+               "0. Done\n"
+               "Choice: ");
 
-    // exemplu simplu: modifică headerul Host
-    char *pos = strstr(buffer, "Host:");
-    if (pos) strcpy(pos, "Host: 127.0.0.1:8000\r\n");
+        char c[8];
+        fgets(c, sizeof(c), stdin);
 
-    forward_request(client_sock, server_sock, buffer);
+        switch (c[0]) {
+            case '1': edit_change_method(req); break;
+            case '2': edit_change_url(req); break;
+            case '3': edit_change_host(req); break;
+            case '4': edit_add_or_replace_header(req); break;
+            case '5': edit_remove_header(req); break;
+            case '6': edit_modify_body(req); break;
+            case '0': return;
+            default: printf("Optiune invalida.\n");
+        }
+    }
 }
 void replace_response(int client_sock, int server_sock, char *buffer) {
     printf("[REPLACE] Forwarding request, but replacing response...\n");
@@ -97,7 +116,7 @@ void handle_client(int client_sock) {
     printf("[PROXY] Connected to server.\n");
 
     while (1) {
-        // citește o cerere HTTP de la client
+        // citește o cerere HTTP completa de la client
         bytes_read = read(client_sock, buffer, sizeof(buffer) - 1);
         if (bytes_read <= 0) {
             printf("[PROXY] Client disconnected. Closing connection.\n");
@@ -107,28 +126,38 @@ void handle_client(int client_sock) {
         buffer[bytes_read] = '\0';
         printf("\n[PROXY] Received request:\n%s\n", buffer);
 
-        printf("[ACTION] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave, (q)uit: ");
-        char action_buffer[10];
-        if (!fgets(action_buffer, sizeof(action_buffer), stdin))
-            break;
-        char action = action_buffer[0];
+        //bucla pt buffer-ul actual
+        while(1)
+        {
+            printf("[ACTION] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave, (n)ext ,(h)show, (q)uit: ");
+            char action_buffer[10];
+            if (!fgets(action_buffer, sizeof(action_buffer), stdin)) break;
+            char action = action_buffer[0];
 
-        if (action == 'q') {
-            printf("[PROXY] Quit command received. Closing connection.\n");
-            break;
-        }
+            if (action == 'q') {
+                printf("[PROXY] Quit command received.\n");
+                close(server_sock);
+                close(client_sock);
+                return;
+            }
+            if (action == 'n') {
+                printf("[PROXY] Moving to next request...\n");
+                break;  // ies din bucla internă, citesc alta cerere
+            }
 
         switch (action) {
             case 'f': forward_request(client_sock, server_sock, buffer); break;
-            case 'b': block_request(client_sock); break;
-            case 'e': edit_request(client_sock, server_sock, buffer); break;
-            case 'r': replace_response(client_sock, server_sock, buffer); break;
-            case 's': save_request(buffer); break;
+            case 'b': block_request(client_sock); continue;
+            case 'e': edit_request(buffer); continue;
+            case 'r': replace_response(client_sock, server_sock, buffer); continue;;
+            case 's': save_request(buffer); continue;
+            case 'h': printf("\n------- SHOW REQUEST -------\n%s\n-----------------------------\n", buffer);continue;
             default:
                 printf("[PROXY] Unknown action. Blocking request.\n");
                 block_request(client_sock);
                 break;
         }
+    }
     }
 
     close(server_sock);
