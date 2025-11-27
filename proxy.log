@@ -1,0 +1,5 @@
+[2025-11-27 16:03:22] [START] Proxy server started listening.
+[2025-11-27 16:03:27] [CONN] Connected to upstream server.
+[2025-11-27 16:03:33] [REQ] Received new HTTP request.
+[2025-11-27 16:03:38] [FORWARD] Response forwarded to client successfully.
+[2025-11-27 16:03:49] [QUIT] User commanded quit.
