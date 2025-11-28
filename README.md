@@ -11,3 +11,16 @@ Implementat 31.10.2025
 -> Inchidere client => se inchid si prxy si server
 -> Modurile de editare : f, b, e, r, s
 -> Client poate alege unde sa trimita
+
+Implementat 19.11.2025:
+->finalizat optiunile de edit
+
+Implementat 28.11.2025:
+->inlocuit cu apleuri de sistem
+->logging
+
+
+Urmeaza:
+->semafor:thread pool
+->posibil implementare de proritati
+->coada automata pt mesaje
