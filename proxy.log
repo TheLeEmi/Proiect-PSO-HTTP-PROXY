@@ -3,3 +3,12 @@
 [2025-11-27 16:03:33] [REQ] Received new HTTP request.
 [2025-11-27 16:03:38] [FORWARD] Response forwarded to client successfully.
 [2025-11-27 16:03:49] [QUIT] User commanded quit.
+[2026-01-06 14:02:04] [START] Proxy server started.
+[2026-01-06 14:02:18] [CONN] Connected to upstream server.
+[2026-01-06 14:02:21] [CONN] Connected to upstream server.
+[2026-01-06 14:02:32] [REQ] Received new HTTP request.
+[2026-01-06 14:02:43] [REQ] Received new HTTP request.
+[2026-01-06 14:02:43] [FORWARD] Response forwarded to client successfully.
+[2026-01-06 14:02:45] [FORWARD] Response forwarded to client successfully.
+[2026-01-06 14:02:57] [CONN] Client disconnected.
+[2026-01-06 14:02:59] [CONN] Client disconnected.

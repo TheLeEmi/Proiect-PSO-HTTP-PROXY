@@ -3,83 +3,68 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <fcntl.h>      // Necesar pentru open si flag-uri
-#include <sys/stat.h>   // Necesar pentru permisiuni fisier
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
-#include <time.h>       // Necesar pentru timestamp
+#include <time.h>
+#include <pthread.h>    // Threading
+#include <semaphore.h>  // Semafoare
+
+#include "http_edit.h" // Functii pentru editarea request-urilor
 
 #define SERVER_PORT 8000
 #define PROXY_PORT 8080
 #define LOG_FILE "proxy.log"
+#define MAX_CLIENTS 10  // Limita impusa de semafor
 
+// --- GLOBALS PENTRU SINCRONIZARE ---
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;     // Protejeaza scrierea in log
+pthread_mutex_t console_mutex = PTHREAD_MUTEX_INITIALIZER; // Protejeaza STDIN/STDOUT pentru meniu
+sem_t connection_sem;                                      // Limiteaza nr de conexiuni simultane
 
-void edit_change_method(char *req);
-void edit_change_url(char *req);
-void edit_change_host(char *req);
-void edit_add_or_replace_header(char *req);
-void edit_remove_header(char *req);
-void edit_modify_body(char *req);
-// -----------------------------------------------------------------------------
-
-// Functie helper pentru a obtine timpul curent ca string
+// Functie helper pentru timestamp
 void get_timestamp(char *buffer, size_t size) {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     strftime(buffer, size, "%Y-%m-%d %H:%M:%S", t);
 }
 
-// MECANISM DE LOGGING FOLOSIND APELURI DE SISTEM
+// Scriere in log protejata de Mutex
 void write_to_log(const char *tag, const char *message) {
     int fd;
-    char log_buffer[512]; // Buffer pentru linia de log
+    char log_buffer[512];
     char time_str[32];
 
     get_timestamp(time_str, sizeof(time_str));
-
-    // Formatam linia in memorie (sprintf e safe, nu e operatie I/O pe disc)
-    // Format: [YYYY-MM-DD HH:MM:SS] [TAG] Message
     int len = snprintf(log_buffer, sizeof(log_buffer), "[%s] [%s] %s\n", time_str, tag, message);
 
-    // 1. OPEN - Deschidem fisierul folosind apel de sistem
-    // O_WRONLY: Doar scriere
-    // O_CREAT: Creaza fisierul daca nu exista
-    // O_APPEND: Scrie la finalul fisierului
-    // 0644: Permisiuni (rw-r--r--)
+    // CRITICAL SECTION START
+    pthread_mutex_lock(&log_mutex);
+    
     fd = open(LOG_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
-
-    if (fd == -1) {
+    if (fd != -1) {
+        write(fd, log_buffer, len);
+        close(fd);
+    } else {
         perror("[SYSTEM] Error opening log file");
-        return;
     }
 
-    // 2. WRITE - Scriem efectiv folosind descriptorul de fisier
-    if (write(fd, log_buffer, len) == -1) {
-        perror("[SYSTEM] Error writing to log file");
-    }
-
-    // 3. CLOSE - Inchidem descriptorul
-    close(fd);
-}
-
-int get_content_length(const char *headers)
-{
-    char *cl_ptr = strcasestr(headers, "Content-Length:");
-    if(cl_ptr)
-    {
-        return atoi(cl_ptr + 15);
-    }
-    return 0;
+    pthread_mutex_unlock(&log_mutex);
+    // CRITICAL SECTION END
 }
 
 void forward_request(int client_sock, int server_sock, char *buffer) {
     write(server_sock, buffer, strlen(buffer));
 
     int n;
-    while ((n = read(server_sock, buffer, 4096)) > 0) {
-        write(client_sock, buffer, n);
+    // Buffer local thread-ului
+    char local_buf[4096]; 
+    while ((n = read(server_sock, local_buf, 4096)) > 0) {
+        write(client_sock, local_buf, n);
     }
-
-    printf("[FORWARD] Forwarded response to client.\n");
+    
+    // Folosim un lock rapid doar pentru printf daca vrem output curat, 
+    // dar aici il lasam liber pentru performanta (doar logul e critic)
     write_to_log("FORWARD", "Response forwarded to client successfully.");
 }
 
@@ -92,16 +77,15 @@ void block_request(int client_sock) {
         "<h1>Request blocked by proxy</h1>";
 
     write(client_sock, response, strlen(response));
-    printf("[BLOCK] Sent 403 Forbidden to client.\n");
     write_to_log("BLOCK", "403 Forbidden sent to client.");
 }
 
+// Aceasta functie este chemata cand console_mutex este deja blocat
 void edit_request(char *req) {
-    printf("[EDIT] Editing request before forwarding...\n");
     write_to_log("EDIT", "User entered edit menu.");
     
     while (1) {
-        printf("\n[EDIT MENU]\n"
+        printf("\n[EDIT MENU - Thread %lu]\n"
                "1. Change method\n"
                "2. Change URL\n"
                "3. Change Host\n"
@@ -109,7 +93,7 @@ void edit_request(char *req) {
                "5. Remove header\n"
                "6. Edit body\n"
                "0. Done\n"
-               "Choice: ");
+               "Choice: ", pthread_self());
 
         char c[8];
         if (!fgets(c, sizeof(c), stdin)) break;
@@ -128,11 +112,8 @@ void edit_request(char *req) {
 }
 
 void replace_response(int client_sock, int server_sock, char *buffer) {
-    printf("[REPLACE] Forwarding request, but replacing response...\n");
-
-    // Trimitem cererea la server (ca sa nu ramana serverul blocat asteptand), dar ignoram raspunsul
-    write(server_sock, buffer, strlen(buffer));
-
+    write(server_sock, buffer, strlen(buffer)); // Send to server anyway to clear pipe
+    
     const char *custom =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
@@ -141,30 +122,31 @@ void replace_response(int client_sock, int server_sock, char *buffer) {
         "<h1>Replaced by Proxy :)</h1>";
 
     write(client_sock, custom, strlen(custom));
-    printf("[REPLACE] Sent custom response to client.\n");
     write_to_log("REPLACE", "Original server response replaced with custom message.");
 }
 
-// Modificat pentru a folosi System Calls in loc de fopen/fprintf
 void save_request(const char *buffer) {
+    // Si aici folosim mutex-ul de log sau unul dedicat, dar il refolosim pe cel de log pentru simplitate
+    pthread_mutex_lock(&log_mutex);
+    
     int fd = open("requests.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd == -1) {
-        perror("[SAVE] open");
-        return;
+    if (fd != -1) {
+        char header_msg[] = "---- New Request ----\n";
+        write(fd, header_msg, strlen(header_msg));
+        write(fd, buffer, strlen(buffer));
+        write(fd, "\n", 1);
+        close(fd);
     }
     
-    char header_msg[] = "---- New Request ----\n";
-    write(fd, header_msg, strlen(header_msg));
-    write(fd, buffer, strlen(buffer));
-    write(fd, "\n", 1);
-    
-    close(fd);
-    
-    printf("[SAVE] Request saved to requests.log using system calls.\n");
+    pthread_mutex_unlock(&log_mutex);
     write_to_log("SAVE", "Request content saved to requests.log.");
 }
 
-void handle_client(int client_sock) {
+// Functia executata de fiecare thread
+void *handle_client_thread(void *client_sock_ptr) {
+    int client_sock = *(int*)client_sock_ptr;
+    free(client_sock_ptr);
+
     char buffer[4096];
     int bytes_read;
 
@@ -178,70 +160,118 @@ void handle_client(int client_sock) {
         perror("[PROXY] connect to server failed");
         write_to_log("ERROR", "Failed to connect to upstream server.");
         close(client_sock);
-        return;
+        // Eliberam semaforul la iesire
+        sem_post(&connection_sem);
+        return NULL;
     }
 
-    printf("[PROXY] Connected to server.\n");
     write_to_log("CONN", "Connected to upstream server.");
 
     while (1) {
         bytes_read = read(client_sock, buffer, sizeof(buffer) - 1);
         if (bytes_read <= 0) {
-            printf("[PROXY] Client disconnected. Closing connection.\n");
             write_to_log("CONN", "Client disconnected.");
             break; 
         }
-
         buffer[bytes_read] = '\0';
-        printf("\n[PROXY] Received request:\n%s\n", buffer);
+
+        // --- INTERACTIUNE CU UTILIZATORUL ---
+        // Blocăm accesul la consolă pentru ca administratorul să se ocupe 
+        // doar de ACEST request, chiar dacă vin și altele în fundal.
+        pthread_mutex_lock(&console_mutex);
+        
+        printf("\n[PROXY Thread %lu] Received request:\n%s\n", pthread_self(), buffer);
         write_to_log("REQ", "Received new HTTP request.");
 
-        while(1)
+        int keep_processing = 1;
+        while(keep_processing)
         {
-            printf("[ACTION] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave, (n)ext ,(h)show, (q)uit: ");
+            printf("[ACTION Thread %lu] (f)orward, (b)lock, (e)dit, (r)eplace, (s)ave, (n)ext, (q)uit client: ", pthread_self());
             char action_buffer[10];
             if (!fgets(action_buffer, sizeof(action_buffer), stdin)) break;
             char action = action_buffer[0];
 
-            if (action == 'q') {
-                printf("[PROXY] Quit command received.\n");
-                write_to_log("QUIT", "User commanded quit.");
-                close(server_sock);
-                close(client_sock);
-                return;
-            }
-            if (action == 'n') {
-                printf("[PROXY] Moving to next request...\n");
-                break;
-            }
-
             switch (action) {
-                case 'f': forward_request(client_sock, server_sock, buffer); break;
-                case 'b': block_request(client_sock); continue;
-                case 'e': edit_request(buffer); continue;
-                case 'r': replace_response(client_sock, server_sock, buffer); continue;;
-                case 's': save_request(buffer); continue;
-                case 'h': printf("\n------- SHOW REQUEST -------\n%s\n-----------------------------\n", buffer);continue;
-                default:
-                    printf("[PROXY] Unknown action. Blocking request.\n");
-                    block_request(client_sock);
+                case 'f': 
+                    // Deblocam consola inainte de operatiile lungi de retea
+                    pthread_mutex_unlock(&console_mutex); 
+                    forward_request(client_sock, server_sock, buffer);
+                    // Dupa forward, trecem la asteptarea urmatorului request (iesim din loop-ul de actiuni)
+                    keep_processing = 0; 
+                    // Nota: Nu mai blocam consola aici, o va bloca urmatorul read loop
                     break;
+                    
+                case 'b': 
+                    block_request(client_sock); 
+                    // Dupa block, ramanem in loop sau iesim? De obicei iesim.
+                    keep_processing = 0;
+                    pthread_mutex_unlock(&console_mutex);
+                    break;
+
+                case 'e': 
+                    // Editarea necesita consola, deci ramanem cu ea blocata
+                    edit_request(buffer); 
+                    // Dupa editare, re-afisam meniul (continue)
+                    continue; 
+
+                case 'r': 
+                    pthread_mutex_unlock(&console_mutex);
+                    replace_response(client_sock, server_sock, buffer); 
+                    keep_processing = 0;
+                    break;
+
+                case 's': 
+                    // Save nu necesita retea, dar e rapid.
+                    save_request(buffer); 
+                    printf("[PROXY] Saved.\n");
+                    continue;
+
+                case 'n':
+                    printf("[PROXY] Skipping...\n");
+                    keep_processing = 0;
+                    pthread_mutex_unlock(&console_mutex);
+                    break;
+
+                case 'q':
+                    keep_processing = 0;
+                    // Fortam iesirea din while-ul exterior
+                    bytes_read = 0; 
+                    pthread_mutex_unlock(&console_mutex);
+                    break;
+                    
+                case 'h': 
+                     printf("\n------- SHOW REQUEST -------\n%s\n-----------------------------\n", buffer);
+                     continue;
+
+                default:
+                    printf("[PROXY] Unknown action.\n");
             }
         }
+        
+        // Daca am iesit cu 'q' sau 'n', ne asiguram ca am deblocat mutexul
+        // Verificarea e complexa aici, logica de mai sus deblocheaza pe ramurile care fac I/O
+        if (bytes_read == 0) break;
     }
 
     close(server_sock);
     close(client_sock);
-    printf("[PROXY] Connection closed.\n");
+    
+    // Semnalizam ca s-a eliberat un loc
+    sem_post(&connection_sem);
+    
+    printf("[PROXY Thread %lu] Connection closed.\n", pthread_self());
+    return NULL;
 }
 
 int main() {
-    int proxy_fd, client_sock;
+    int proxy_fd, *client_sock;
     struct sockaddr_in proxy_addr, client_addr;
     socklen_t client_len = sizeof(client_addr);
 
+    // Initializare semafor: max MAX_CLIENTS conexiuni simultane
+    sem_init(&connection_sem, 0, MAX_CLIENTS);
+
     proxy_fd = socket(AF_INET, SOCK_STREAM, 0);
-    // Adaugam optiunea SO_REUSEADDR ca sa nu primim eroare la restart rapid
     int opt = 1;
     setsockopt(proxy_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -255,24 +285,37 @@ int main() {
     }
     
     listen(proxy_fd, 5);
-
-    printf("[PROXY] Listening on port %d...\n", PROXY_PORT);
-    write_to_log("START", "Proxy server started listening.");
+    printf("[PROXY] Multithreaded Proxy listening on port %d...\n", PROXY_PORT);
+    write_to_log("START", "Proxy server started.");
 
     while (1) {
-        client_sock = accept(proxy_fd, (struct sockaddr*)&client_addr, &client_len);
-        if (client_sock < 0) {
+        // Asteptam sa fie disponibil un "slot" in semafor
+        sem_wait(&connection_sem);
+
+        client_sock = malloc(sizeof(int));
+        *client_sock = accept(proxy_fd, (struct sockaddr*)&client_addr, &client_len);
+        
+        if (*client_sock < 0) {
             perror("Accept failed");
+            free(client_sock);
+            sem_post(&connection_sem); // Daca esueaza, eliberam slotul
             continue;
         }
 
-        if (fork() == 0) { 
-            close(proxy_fd);
-            handle_client(client_sock);
-            exit(0);
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, handle_client_thread, client_sock) != 0) {
+            perror("Failed to create thread");
+            free(client_sock);
+            close(*client_sock);
+            sem_post(&connection_sem);
+            continue;
         }
-        close(client_sock);
+
+        pthread_detach(tid);
     }
 
+    sem_destroy(&connection_sem);
+    pthread_mutex_destroy(&log_mutex);
+    pthread_mutex_destroy(&console_mutex);
     return 0;
 }

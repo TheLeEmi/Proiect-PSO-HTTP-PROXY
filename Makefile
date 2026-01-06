@@ -1,5 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
+# Flag-ul -pthread este necesar atât pentru compilare cât și pentru linkare în aplicații multithreaded
+LDFLAGS = -pthread
 
 # Fișiere obiect
 OBJS = http_edit.o
@@ -13,12 +15,14 @@ all: $(TARGETS)
 client: client.c
 	$(CC) $(CFLAGS) client.c -o client
 
+# Proxy necesită obiectul http_edit și biblioteca pthread
 proxy: proxy.c $(OBJS)
-	$(CC) $(CFLAGS) proxy.c $(OBJS) -o proxy -lpthread
+	$(CC) $(CFLAGS) proxy.c $(OBJS) -o proxy $(LDFLAGS)
 	@echo "Proxy compilat."
 
+# Serverul modificat folosește acum pthreads, deci are nevoie de LDFLAGS
 server: server.c
-	$(CC) $(CFLAGS) server.c -o server
+	$(CC) $(CFLAGS) server.c -o server $(LDFLAGS)
 	@echo "Server compilat."
 
 http_edit.o: http_edit.c http_edit.h
