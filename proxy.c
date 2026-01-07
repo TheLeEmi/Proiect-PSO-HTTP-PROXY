@@ -11,11 +11,15 @@
 #include <semaphore.h>  // Semafoare
 
 #include "http_edit.h" // Functii pentru editarea request-urilor
+#include "priority_queue.h"  // Coada de priorități
 
 #define SERVER_PORT 8000
 #define PROXY_PORT 8080
 #define LOG_FILE "proxy.log"
 #define MAX_CLIENTS 10  // Limita impusa de semafor
+#define WORKER_COUNT 3   // 2–3 worker threads
+// Proxy-ul folosește o coadă de priorități pentru a procesa cererile HTTP în funcție de importanță,
+// implementând un model producer–consumer sincronizat cu mutex și condition variables!!
 
 // --- GLOBALS PENTRU SINCRONIZARE ---
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;     // Protejeaza scrierea in log
@@ -53,6 +57,23 @@ void write_to_log(const char *tag, const char *message) {
     // CRITICAL SECTION END
 }
 
+// CALCUL PRIORITATE
+int compute_priority(const char *req) {
+    int p = 0;
+
+    if (!strncmp(req, "POST", 4) || !strncmp(req, "PUT", 3))
+        p += 3;
+
+    if (strstr(req, "/admin"))
+        p += 2;
+
+    if (strstr(req, "Authorization:"))
+        p += 2;
+
+    return p;
+}
+
+//--NETWORK--
 void forward_request(int client_sock, int server_sock, char *buffer) {
     write(server_sock, buffer, strlen(buffer));
 

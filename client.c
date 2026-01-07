@@ -3,9 +3,84 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #define PROXY_PORT 8080
 #define PROXY_HOST "127.0.0.1"
+//diferite tipuri de date din cadru pt a randomiza cererea trimisa
+//use case: coada de prioritati
+typedef enum {
+    REQ_GET,
+    REQ_POST,
+    REQ_PUT,
+    REQ_COUNT
+} HttpMethod;
+
+const char *method_to_string(HttpMethod m) {
+    switch (m) {
+        case REQ_GET:  return "GET";
+        case REQ_POST: return "POST";
+        case REQ_PUT:  return "PUT";
+        default:       return "GET";
+    }
+}
+
+const char *urls[] = {
+    "/",
+    "/index.html",
+    "/admin",
+    "/login",
+    "/api/data",
+    "/static/img.png"
+};
+
+const char *hosts[] = {
+    "localhost:8000",
+    "admin.localhost:8000",
+    "api.localhost:8000"
+};
+
+const char *auth_headers[] = {
+    "",  // fara Authorization
+    "Authorization: Bearer test123\r\n"
+};
+
+//creez cererea
+void build_random_request(char *request, size_t size) {
+    HttpMethod method = rand() % REQ_COUNT;
+    const char *url = urls[rand() % (sizeof(urls) / sizeof(urls[0]))];
+    const char *host = hosts[rand() % (sizeof(hosts) / sizeof(hosts[0]))];
+    const char *auth = auth_headers[rand() % 2];
+
+    // Body doar pentru POST / PUT
+    const char *body = "";
+    char body_buf[128] = "";
+    int content_length = 0;
+
+    if (method == REQ_POST || method == REQ_PUT) {
+        snprintf(body_buf, sizeof(body_buf),
+                 "data=example&time=%ld", time(NULL));
+        body = body_buf;
+        content_length = strlen(body);
+    }
+
+    snprintf(request, size,
+        "%s %s HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "%s"
+        "Content-Length: %d\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "%s",
+        method_to_string(method),
+        url,
+        host,
+        auth,
+        content_length,
+        body
+    );
+}
+
 
 int main() {
     int sock;
@@ -31,37 +106,29 @@ int main() {
 
     printf("Conexiune stabilita cu proxy-ul.\n");
 
+    srand(time(NULL));
+
     while (1) {
-        printf("Path (ex: /index.html) sau q pentru quit: ");
-        if (!fgets(path, sizeof(path), stdin)) break;
-
-        path[strcspn(path, "\n")] = 0;
-        if (strcmp(path, "q") == 0) break;
-
-        if (path[0] != '/')
-            snprintf(path, sizeof(path), "/%s", path);
-
+        printf("Apasa ENTER pentru request random sau q pentru quit: ");
+        char input[8];
+        if (!fgets(input, sizeof(input), stdin)) break;
+        if (input[0] == 'q') break;
+    
         char request[1024];
-        snprintf(request, sizeof(request),
-                 "GET %s HTTP/1.1\r\n"
-                 "Host: localhost:8000\r\n"
-                 "Connection: keep-alive\r\n"
-                 "\r\n",
-                 path);
-
+        build_random_request(request, sizeof(request));
+    
+        printf("\n----- REQUEST TRIMIS -----\n%s\n", request);
         write(sock, request, strlen(request));
-
-        printf("\n----- Raspuns -----\n");
-
+    
+        printf("\n----- RASPUNS -----\n");
         int n;
         while ((n = read(sock, buffer, sizeof(buffer))) > 0) {
             fwrite(buffer, 1, n, stdout);
-
-            if (n < sizeof(buffer)) break;
+            if (n < (int)sizeof(buffer)) break;
         }
-
         printf("\n-------------------\n");
     }
+    
 
     close(sock);
     printf("Client terminat.\n");

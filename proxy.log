@@ -12,3 +12,26 @@
 [2026-01-06 14:02:45] [FORWARD] Response forwarded to client successfully.
 [2026-01-06 14:02:57] [CONN] Client disconnected.
 [2026-01-06 14:02:59] [CONN] Client disconnected.
+[2026-01-07 12:31:17] [START] Proxy server started.
+[2026-01-07 12:31:23] [CONN] Connected to upstream server.
+[2026-01-07 12:31:26] [REQ] Received new HTTP request.
+[2026-01-07 12:31:44] [EDIT] User entered edit menu.
+[2026-01-07 12:32:03] [FORWARD] Response forwarded to client successfully.
+[2026-01-07 12:32:19] [CONN] Client disconnected.
+[2026-01-07 20:49:11] [START] Proxy server started.
+[2026-01-07 20:49:26] [CONN] Connected to upstream server.
+[2026-01-07 20:49:40] [CONN] Connected to upstream server.
+[2026-01-07 20:49:47] [REQ] Received new HTTP request.
+[2026-01-07 20:49:55] [REQ] Received new HTTP request.
+[2026-01-07 20:49:55] [FORWARD] Response forwarded to client successfully.
+[2026-01-07 20:50:07] [FORWARD] Response forwarded to client successfully.
+[2026-01-07 20:50:14] [REQ] Received new HTTP request.
+[2026-01-07 20:50:38] [CONN] Connected to upstream server.
+[2026-01-07 20:50:57] [SAVE] Request content saved to requests.log.
+[2026-01-07 20:51:01] [BLOCK] 403 Forbidden sent to client.
+[2026-01-07 20:51:01] [REQ] Received new HTTP request.
+[2026-01-07 20:51:14] [FORWARD] Response forwarded to client successfully.
+[2026-01-07 20:51:14] [REQ] Received new HTTP request.
+[2026-01-07 20:51:18] [FORWARD] Response forwarded to client successfully.
+[2026-01-07 20:51:23] [CONN] Client disconnected.
+[2026-01-07 20:51:26] [CONN] Client disconnected.
