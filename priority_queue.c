@@ -16,13 +16,14 @@ void pq_init(PriorityQueue *q) {
 void pq_push(PriorityQueue *q, RequestNode *node) {
     pthread_mutex_lock(&q->mutex);
 
+    //daca e goala coada sau cererea are prioritate mai mare decat prima cerere
     if (!q->head ||
         effective_priority(node) > effective_priority(q->head)) {
 
         node->next = q->head;
         q->head = node;
 
-    } else {
+    } else {//ii gasesc locul in functie de priortate
         RequestNode *cur = q->head;
         while (cur->next &&
                effective_priority(cur->next) >= effective_priority(node)) {
@@ -32,7 +33,7 @@ void pq_push(PriorityQueue *q, RequestNode *node) {
         cur->next = node;
     }
 
-    pthread_cond_signal(&q->cond);
+    pthread_cond_signal(&q->cond);//semnalizez ca am adaugat o cerere si ca alt thread o poate executa
     pthread_mutex_unlock(&q->mutex);
 }
 

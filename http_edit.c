@@ -111,7 +111,8 @@ void edit_remove_header(char *req) {
     char *end = strstr(pos, "\r\n");
     if (!end) return;
 
-    memmove(pos, end + 2, strlen(end + 2) + 1); // shift left
+    memmove(pos, end + 2, strlen(end + 2) + 1); // shift left ca
+    //sa elimin headerul
 
     printf("[EDIT] Header sters.\n");
 }
@@ -122,7 +123,7 @@ void edit_modify_body(char *req) {
         return;
     }
 
-    body += 4; // treci de separator
+    body += 4; // trec de separator
 
     printf("Body nou: ");
     fgets(body, 4096 - (body - req), stdin);

@@ -16,9 +16,9 @@ typedef struct RequestNode {
 } RequestNode;
 
 typedef struct {
-    RequestNode *head;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    RequestNode *head;//capul cozii
+    pthread_mutex_t mutex;//mutex pt a proteja accesul concurent la coada
+    pthread_cond_t cond;//var de conditie fol in pop pt sincronizare
 } PriorityQueue;
 
 void pq_init(PriorityQueue *q);

@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 #include <pthread.h> // Header necesar pentru thread-uri
 
-#define PORT 8000
+#define PORT 8000//port des folosit pt testare/servere web etc
 
 // Mutex pentru a sincroniza scrierea la stdout (consola)
 pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -55,7 +55,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
-    // Optiune pentru a putea reporni serverul rapid
+    // Optiune pentru a putea reporni serverul rapid ca sa asculte
+    //pe acelasi port daca a fost oprit
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 

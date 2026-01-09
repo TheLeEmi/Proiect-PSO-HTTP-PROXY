@@ -340,3 +340,4 @@ int main() {
     pthread_mutex_destroy(&console_mutex);
     return 0;
 }
+

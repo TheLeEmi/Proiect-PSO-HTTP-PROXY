@@ -35,3 +35,10 @@
 [2026-01-07 20:51:18] [FORWARD] Response forwarded to client successfully.
 [2026-01-07 20:51:23] [CONN] Client disconnected.
 [2026-01-07 20:51:26] [CONN] Client disconnected.
+[2026-01-08 13:22:54] [START] Proxy server started.
+[2026-01-08 13:23:04] [CONN] Connected to upstream server.
+[2026-01-08 13:23:08] [REQ] Received new HTTP request.
+[2026-01-08 13:23:25] [BLOCK] 403 Forbidden sent to client.
+[2026-01-08 13:23:41] [REQ] Received new HTTP request.
+[2026-01-08 13:23:50] [FORWARD] Response forwarded to client successfully.
+[2026-01-08 13:46:55] [CONN] Client disconnected.

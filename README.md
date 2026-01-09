@@ -19,8 +19,15 @@ Implementat 28.11.2025:
 ->inlocuit cu apleuri de sistem
 ->logging
 
+Implementare 05.01.2026:
+->multithreading complet
+->mutex si semafor
+
+Implementat 07:01.2026:
+->randomizarea transmiterii de mesaje (campuri diferite)
+->coada de prioritate
+->aging(prioritatea unui mesaj creste in coada de asteptare in functie de cat timp sunt blocate)
+->multimple worker threads
 
 Urmeaza:
-->semafor:thread pool
-->posibil implementare de proritati
-->coada automata pt mesaje
+->docummentatie finalizata
